@@ -30,7 +30,7 @@ The tutorial uses:
 
 ## Core dump generation
 
-To investigate application unresponsiveness, a core dump or memory dump allows you to inspect the state of its threads and any possible locks that may have contention issues. Run the [sample debug](/samples/dotnet/samples/diagnostic-scenarios) application using the following command from the sample root directory:
+To investigate an application that stops responding because of a deadlock, collect a core dump or memory dump. The dump lets you inspect blocked threads, lock owners, and the wait cycle. Run the [sample debug](/samples/dotnet/samples/diagnostic-scenarios) application using the following command from the sample root directory:
 
 ```dotnetcli
 dotnet run
