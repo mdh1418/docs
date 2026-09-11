@@ -190,9 +190,11 @@ sudo dotnet-trace collect-linux
 
 Let it run for about 20-30 seconds, then press <kbd>Ctrl+C</kbd> or <kbd>Enter</kbd> to stop the collection. The result is a `.nettrace` file that includes both managed and native callstacks.
 
-Open the `.nettrace` file with [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1). Use the **CPU Stacks** view to identify the methods that consume the most CPU time.
+For an approachable managed CPU investigation, open the `.nettrace` file in Visual Studio. Testing with Visual Studio 18.12 Canary build 12209.137.main opened `cpu.nettrace` directly in **CPU Usage**. The **Functions**, **Call Tree**, **Modules**, and **Flame Graph** views were available. In that trace, **Functions** identified `Fibonacci` at 55.89% self CPU and `IsPrime` at 10.71%.
 
-PerfView 3.2.1 or later can resolve .NET native and R2R symbols at analysis time. In PerfView, select unresolved module frames and choose **Lookup Symbols**. For other native libraries, configure a local symbol path. For more information, see [Get symbols for native runtime frames in PerfView](dotnet-trace.md#get-symbols-for-native-runtime-frames-in-perfview).
+If **Open details** initially emphasizes startup or `corehost`, select **Functions** or **Call Tree**, and then filter to the target process. The evaluated trace didn't produce a built-in insight, but the CPU views still identified the managed hotspots.
+
+Use [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) when you need deeper stack analysis or Linux native and R2R symbol lookup. For more information, see [Analyze `collect-linux` traces](dotnet-trace.md#analyze-collect-linux-traces).
 
 #### Use `perf`
 
@@ -246,11 +248,11 @@ Open the `nettrace` with [`PerfView`](https://github.com/microsoft/perfview/blob
 
 ---
 
-## Analyze a standard trace with Visual Studio
+## Analyze `.nettrace` files with Visual Studio
 
 Visual Studio can analyze `.nettrace` files that `dotnet-trace collect` creates. To analyze one of these files, transfer the file and any required supporting files to a Windows machine, and then open the trace in Visual Studio. For more information, see [Analyze CPU usage data](/visualstudio/profiling/beginners-guide-to-performance-profiling?#step-2-analyze-cpu-usage-data).
 
-The `collect-linux` steps in this tutorial use PerfView 3.2.1 or later. This article documents PerfView support for the updated preview trace format and its analysis-time native and R2R symbol lookup.
+Visual Studio 18.12 Canary build 12209.137.main also opened the evaluated `collect-linux` CPU trace directly. For the verified strengths and limitations of Visual Studio and PerfView with `collect-linux` traces, see [Analyze `collect-linux` traces](dotnet-trace.md#analyze-collect-linux-traces).
 
 ## See also
 

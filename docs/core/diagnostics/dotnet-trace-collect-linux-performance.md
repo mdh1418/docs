@@ -24,10 +24,26 @@ The tutorial requires:
 - Linux that meets the [`collect-linux` prerequisites](dotnet-trace.md#prerequisites).
 - The [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
 - The latest [`dotnet-trace`](dotnet-trace.md) global tool.
-- [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) on Windows for the analysis steps.
+- Visual Studio 18.12 Canary build 12209.137.main on Windows for the managed CPU and basic GC analysis steps.
+- [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) on Windows for thread-time, blocking, contention, native symbol, and deeper stack analysis.
 - The [performance scenarios sample](/samples/dotnet/samples/dotnet-trace-collect-linux-performance-scenarios/).
 
-The `collect-linux` verb uses an updated preview `.nettrace` format. This tutorial uses PerfView because version 3.2.1 and later supports the format and can resolve .NET native and ReadyToRun (R2R) symbols at analysis time. Other analysis tools might not yet support the updated format.
+The `collect-linux` verb uses an updated preview `.nettrace` format. The Visual Studio behavior in this tutorial was verified with build 12209.137.main and the evaluated traces. Later builds might behave differently.
+
+## Choose an analysis tool
+
+Start with Visual Studio for a managed CPU hotspot or a basic GC and allocation overview. Its **CPU Usage** tool provides **Functions**, **Call Tree**, **Modules**, and **Flame Graph** views. In the evaluated GC trace, Visual Studio also reported an **Excessive LOH triggered gen2** insight and useful allocation type counts.
+
+Use PerfView 3.2.1 or later for:
+
+- Thread-time, blocked-time, and wait-stack analysis.
+- Contention analysis and managed lock-site identification.
+- Linux native and ReadyToRun (R2R) symbol lookup.
+- Deeper stack analysis when Visual Studio shows unresolved or unwalkable frames.
+
+In the evaluated Visual Studio build, the ThreadPool and blocking traces exposed only raw events. The lock trace didn't produce a contention insight or identify the managed lock site. Linux native frames remained module names and addresses. The symbol settings displayed generic search locations, and the Microsoft Symbol Server was off by default. Temporarily enabling it and reopening the trace didn't resolve `libcoreclr.so` frames.
+
+For the complete evaluation summary, see [Analyze `collect-linux` traces](dotnet-trace.md#analyze-collect-linux-traces).
 
 ## Prepare the sample
 
@@ -68,23 +84,23 @@ Machine-wide collection preserves evidence that a process-only trace can miss:
 
 Keep the initial trace short. Scheduler events and detailed runtime events can increase trace size and collection overhead. Add them only when the first trace or the symptom identifies a specific question.
 
-Transfer the `.nettrace` file to the Windows machine that has PerfView. `collect-linux` captures native and R2R frames. To resolve those frames during analysis, follow [Get symbols for native runtime frames in PerfView](dotnet-trace.md#get-symbols-for-native-runtime-frames-in-perfview).
+Transfer the `.nettrace` file to a Windows machine that has Visual Studio or PerfView. `collect-linux` captures native and R2R frames. To resolve those frames during analysis, use PerfView and follow [Get symbols for native runtime frames in PerfView](dotnet-trace.md#get-symbols-for-native-runtime-frames-in-perfview).
 
 ## Example: Find a managed CPU hotspot
 
-Open `cpu-hotspot.nettrace` in PerfView:
+Open `cpu-hotspot.nettrace` in Visual Studio:
 
-1. Open **CPU Stacks**.
-1. Select the interval when the workload ran.
-1. Filter to the sample process.
-1. Find the application method with the greatest exclusive cost.
-1. Follow the inclusive callers back to the application entry point.
+1. Select **CPU Usage**.
+1. Open **Functions**.
+1. Filter to the sample process and the interval when the workload ran.
+1. Sort by **Self CPU** to find the application method that directly consumes CPU.
+1. Use **Call Tree** to follow the callers back to the application entry point.
 
 **Observation:** `CpuScenarios.Fibonacci` owns nearly all samples for the sample process. Its callers remain in the application stack.
 
 **Conclusion:** The process is compute-bound in `Fibonacci`. The trace identifies both the expensive method and the application path that invokes it.
 
-High exclusive cost identifies where the CPU sampled execution. Inclusive cost shows the callers that led to that work. Start with exclusive cost, and then follow inclusive callers to find the application code that can change.
+High self CPU identifies where the CPU sampled execution. The call tree shows the callers that led to that work. Start with self CPU, and then follow callers to find the application code that can change. Use PerfView **CPU Stacks** when you need deeper grouping or stack analysis.
 
 ## Choose focused trace data
 
@@ -174,7 +190,7 @@ Run the allocation and GC scenario:
 dotnet run -c Release --no-build -- allocation-gc 45
 ```
 
-Collect the allocation and GC configuration for 30 seconds. In PerfView:
+Collect the allocation and GC configuration for 30 seconds. Start in Visual Studio to review GC insights and allocation type counts. Then use PerfView for allocation stacks and detailed GC data:
 
 1. Open **GCStats** to review collection frequency, pause time, and heap size.
 1. Open **GC Heap Alloc Ignore Free (Coarse Sampling)** to find the dominant allocation types and their callers.
@@ -184,6 +200,8 @@ Collect the allocation and GC configuration for 30 seconds. In PerfView:
 **Observation:** `System.String` dominates sampled allocations, collections occur repeatedly during the workload, and CPU stacks lead to the sample's string-building path.
 
 **Conclusion:** Repeated string construction creates allocation churn that drives both application CPU and GC work. The trace identifies where objects are created; it doesn't show that the objects remain reachable as a memory leak.
+
+In the evaluated Visual Studio GC trace, the allocation backtrace for `TempObjectClass` followed `user_events_write`, kernel, and native trace-emission frames without reaching the managed allocation site. Use PerfView when the investigation requires the managed allocation caller.
 
 Correlate the allocation, collection, and CPU intervals. GC activity alone doesn't prove that GC is the original cause because application allocation can drive both the collections and the CPU cost.
 
@@ -195,7 +213,7 @@ Run the sync-over-async scenario:
 dotnet run -c Release --no-build -- sync-over-async 45
 ```
 
-Collect the blocking, contention, and ThreadPool configuration for 30 seconds. In PerfView:
+Collect the blocking, contention, and ThreadPool configuration for 30 seconds. Use PerfView for this analysis. In the evaluated Visual Studio build, the ThreadPool and blocking traces exposed raw events but didn't provide thread-time, blocked-time, or wait-stack analysis.
 
 1. Open the thread-time stacks for the sample process.
 1. Find ThreadPool worker stacks with high blocked time.

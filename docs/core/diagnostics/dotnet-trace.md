@@ -292,7 +292,7 @@ dotnet-trace collect
 ## dotnet-trace collect-linux
 
 > [!NOTE]
-> The `collect-linux` verb is a new preview feature and relies on an updated version of the .nettrace file format. The latest PerfView release supports these trace files, but other ways of using the trace file, such as [`convert`](#dotnet-trace-convert) and [`report`](#dotnet-trace-report), might not work yet.
+> The `collect-linux` verb is a new preview feature and relies on an updated version of the .nettrace file format. PerfView 3.2.1 or later supports these trace files. Visual Studio 18.12 Canary build 12209.137.main opened the evaluated traces described in [Analyze `collect-linux` traces](#analyze-collect-linux-traces). Other ways of using the trace file, such as [`convert`](#dotnet-trace-convert) and [`report`](#dotnet-trace-report), might not work yet.
 
 Collects diagnostic traces using perf_events, a Linux OS technology. `collect-linux` enables the following additional features over [`collect`](#dotnet-trace-collect).
 
@@ -705,6 +705,20 @@ However, when you want to gain a finer control over the lifetime of the app bein
    > Launching your app with `dotnet run` can be problematic because the dotnet CLI may spawn many child processes that are not your app and they can connect to `dotnet-trace` before your app, leaving your app to be suspended at runtime. It is recommended you directly use a self-contained version of the app or use `dotnet exec` to launch the application.
 
 ## (Linux-only) Collect a machine-wide trace using dotnet-trace
+
+### Analyze `collect-linux` traces
+
+Start with Visual Studio for managed CPU hotspots and a basic GC or allocation overview. Testing with Visual Studio 18.12 Canary build 12209.137.main produced these results:
+
+- `cpu.nettrace` opened directly in **CPU Usage**. The **Functions**, **Call Tree**, **Modules**, and **Flame Graph** views identified managed hotspots. Built-in insights found no issue, and **Open details** initially emphasized startup and `corehost`.
+- `gc.nettrace` produced an **Excessive LOH triggered gen2** insight and useful allocation type counts. The `TempObjectClass` allocation backtrace followed `user_events_write`, kernel, and native trace-emission frames without reaching the managed allocation site.
+- `threadpool.nettrace` and `blocking.nettrace` exposed raw events but no thread-time, wait-stack, or blocked-time analysis.
+- `lock.nettrace` provided **CPU Usage** but no contention insight. Kernel and unresolved `coreclr` frames dominated the trace, and **Hot Path** included `[Unwalkable]` at 31.02%, so the trace didn't identify the managed lock site.
+- Linux native frames remained module names and addresses. The symbol settings displayed generic search locations, and the Microsoft Symbol Server was off by default. Temporarily enabling it and reopening the trace didn't resolve `libcoreclr.so` frames.
+
+Use [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) for `collect-linux` thread-time and blocking analysis, contention analysis, Linux native and R2R symbol lookup, and deeper stack analysis.
+
+These Visual Studio results apply to the tested Canary build and traces. Later builds might behave differently.
 
 ### Get symbols for native runtime frames in PerfView
 
