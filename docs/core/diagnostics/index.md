@@ -1,9 +1,10 @@
 ---
 title: Diagnostics tools overview - .NET
 description: An overview of the tools and techniques available to diagnose .NET applications.
-ms.date: 09/08/2026
+ms.date: 09/11/2026
 ms.topic: overview
 #Customer intent: As a .NET developer, I want to find the best tools to help me diagnose problems so that I can be productive.
+ai-usage: ai-assisted
 ---
 # Diagnostics in .NET
 
@@ -37,8 +38,6 @@ For most cases, whether adding logging to an existing project or creating a new 
 
 [Metrics](metrics.md) are numerical measurements recorded over time to monitor application performance and health. Metrics are often used to generate alerts when potential problems are detected. Metrics have very low performance overhead and many services configure them as always-on telemetry. Exceptions are often recorded as metrics, and can be summarized to reduce the cardinality of the data. For more information, see [Exception summarization](diagnostic-exception-summary.md).
 
-For a tutorial that instruments an application with the <xref:System.Diagnostics.Tracing.EventCounter> API, see [Measure performance using EventCounters](event-counter-perf.md).
-
 ### Distributed traces
 
 [Distributed Tracing](./distributed-tracing.md) is a specialized form of logging that helps you localize failures and performance issues within applications distributed across multiple machines or processes. This technique tracks requests through an application correlating together work done by different application components and separating it from other work the application may be doing for concurrent requests. It is possible to trace every request and sampling can be optionally employed to bound the performance overhead.
@@ -48,7 +47,7 @@ For a tutorial that instruments an application with the <xref:System.Diagnostics
 There are multiple ways that the instrumentation data can be egressed from the application, including:
 
 - [OpenTelemetry](https://github.com/open-telemetry/opentelemetry-dotnet/blob/main/docs/trace/getting-started-console/README.md) - a cross-platform, vendor-neutral standard for collecting and exporting telemetry
-- [.NET CLI tools](./tools-overview.md) such as [dotnet-counters](./dotnet-counters.md)
+- [.NET diagnostic tools](./tools-overview.md), such as [dotnet-counters](./dotnet-counters.md)
 - [dotnet-monitor](./dotnet-monitor.md) - an agent for collecting traces and telemetry
 - Third-party libraries or app code can read the information from the <xref:System.Diagnostics.Metrics?displayProperty=nameWithType>, <xref:Microsoft.Extensions.Logging.ILogger`1>, and <xref:System.Diagnostics.Activity?displayProperty=nameWithType> APIs.
 
@@ -56,15 +55,15 @@ There are multiple ways that the instrumentation data can be egressed from the a
 
 If debugging or observability is not sufficient, .NET supports additional diagnostic mechanisms such as EventSource, Dumps, DiagnosticSource. For more information, see the [specialized diagnostics](./specialized-diagnostics-overview.md) article.
 
-## Diagnostics tools
+## Diagnostic tools
 
-.NET supports a number of [CLI tools](./tools-overview.md) that can be used to diagnose your applications. To automate a custom diagnostic workflow, use the [diagnostics client library](diagnostics-client-library.md) and <xref:Microsoft.Diagnostics.NETCore.Client>.
+.NET supports [diagnostic tools](./tools-overview.md), including Visual Studio, Visual Studio Code, and .NET command-line tools. To automate a custom diagnostic workflow, use the [diagnostics client library](diagnostics-client-library.md) and <xref:Microsoft.Diagnostics.NETCore.Client>.
 
 ## Diagnostics tutorials
 
 ### Performance tutorials
 
-Use [Diagnose performance issues in .NET applications](performance-diagnostics.md) to choose the recommended workflow for a performance symptom. The guide links to the applicable detailed tutorials and hands-on exercises.
+Use [Diagnose performance issues in .NET applications](performance-diagnostics.md) to choose a tutorial for high CPU usage, growing managed memory, ThreadPool starvation, a deadlock, or a Linux CPU problem that requires native and machine-wide context.
 
 ### Crash and dump tutorials
 
