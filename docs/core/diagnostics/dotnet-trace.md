@@ -1,9 +1,10 @@
 ---
 title: dotnet-trace diagnostic tool - .NET CLI
 description: Learn how to use dotnet-trace to collect .NET application traces and Linux system-wide performance traces.
-ms.date: 09/04/2026
+ms.date: 09/11/2026
 ms.topic: reference
 ms.custom: sfi-ropc-nochange
+ai-usage: ai-assisted
 ---
 # dotnet-trace performance analysis utility
 
@@ -705,35 +706,16 @@ However, when you want to gain a finer control over the lifetime of the app bein
 
 ## (Linux-only) Collect a machine-wide trace using dotnet-trace
 
-### Get symbols for native runtime frames
+### Get symbols for native runtime frames in PerfView
 
-`collect-linux` captures native and ReadyToRun (R2R) frames in call stacks. [PerfView and TraceEvent 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) can download and resolve symbols when you analyze the trace:
+`collect-linux` captures native and ReadyToRun (R2R) frames in call stacks. [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) can download and resolve symbols when you analyze the trace:
 
-- .NET native and R2R symbols are available from the Microsoft Symbol Server.
-- Many Azure Linux native symbols are also available from the Microsoft Symbol Server.
-- For native libraries from other Linux distributions, configure PerfView or TraceEvent with a local symbol path that contains the matching distribution symbol files.
+- .NET native and R2R runtime symbols are available from the Microsoft Symbol Server.
+- For native libraries from other Linux distributions, configure PerfView with a local symbol path that contains the matching distribution symbol files.
 
-In PerfView, open a stack view, select the unresolved module frames, and choose **Lookup Symbols**. If prompted, enable the Microsoft Symbol Server. TraceEvent applications can perform the same analysis-time lookup through `SymbolReader`. No symbol setup is required before collection for symbols available from the configured server or local symbol paths.
+In PerfView, open a stack view, select the unresolved module frames, and choose **Lookup Symbols**. If prompted, enable the Microsoft Symbol Server. You don't need to configure symbols before collection when the symbols are available from the configured server or local symbol paths.
 
 `collect-linux` dynamically enables perf map generation for JIT-compiled code, so you don't need to restart .NET processes.
-
-For an offline workflow, use [dotnet-symbol](./dotnet-symbol.md) before collection to place .NET native symbols beside the corresponding runtime libraries:
-
-1. Install `dotnet-symbol`:
-
-   ```dotnetcli
-   dotnet tool install -g dotnet-symbol
-   ```
-
-1. Download the debug symbols for your runtime version. For example, if your runtime is installed at `/usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.0`:
-
-   ```dotnetcli
-   dotnet-symbol --symbols /usr/share/dotnet/shared/Microsoft.NETCore.App/10.0.0/lib*.so
-   ```
-
-1. Place the downloaded `.so.dbg` files beside the runtime libraries they correspond to (for example, `libcoreclr.so.dbg` next to `libcoreclr.so`). By default, `dotnet-symbol` writes symbol files next to each input file. If your runtime libraries live under a protected path such as `/usr/share/dotnet/...`, run `dotnet-symbol` with elevated permissions (for example, by using `sudo`), or use the `-o`/`--output` option to write to a writable directory, then copy the `.so.dbg` files beside the runtime libraries.
-
-After you place the symbols, `collect-linux` resolves native method names when it collects the trace.
 
 ### Collect the trace
 

@@ -1,9 +1,10 @@
 ---
 title: .NET Diagnostic tools overview
 description: An overview of the tools available to diagnose .NET applications.
-ms.date: 09/04/2026
+ms.date: 09/11/2026
 ms.topic: overview
 #Customer intent: As a .NET developer I want to find the best tools to help me diagnose problems so that I can be productive.
+ai-usage: ai-assisted
 ---
 
 # .NET diagnostic tools
@@ -55,10 +56,6 @@ The [dotnet-stack](dotnet-stack.md) tool allows you to quickly print the managed
 [dotnet-debugger-extensions](dotnet-debugger-extensions.md) installs the [.NET debugger extensions](debugger-extensions.md) on Linux, macOS, and Windows.  [LLDB](https://lldb.llvm.org/) is required for Linux and macOS, and  [Windbg/cdb](/windows-hardware/drivers/debugger/debugger-download-tools) is needed for Windows.  
 
 ## Other tools
-
-### OneCollect `record-trace`
-
-The [OneCollect `record-trace`](https://github.com/microsoft/one-collect/tree/main/record-trace) tool records system-wide performance traces on Linux and Windows. Use it for lower-level, scriptable control over event selection, process and CPU filtering, and trace output. For a .NET-oriented Linux workflow that configures runtime events and system profiling together, use [`dotnet-trace collect-linux`](dotnet-trace.md#dotnet-trace-collect-linux).
 
 ### PerfCollect
 

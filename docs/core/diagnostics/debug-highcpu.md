@@ -2,7 +2,8 @@
 title: Debug high CPU usage - .NET
 description: A tutorial that walks you through debugging high CPU usage in .NET.
 ms.topic: tutorial
-ms.date: 09/08/2026
+ms.date: 09/11/2026
+ai-usage: ai-assisted
 ---
 
 # Debug high CPU usage in .NET
@@ -175,7 +176,7 @@ When analyzing an app with high CPU usage, use a profiler to understand what the
 
 ### [Linux](#tab/linux)
 
-Prefer `dotnet-trace collect-linux` for the .NET-oriented Linux workflow. Use OneCollect `record-trace` when you need its lower-level scripting, filtering, or output controls, and use `perf` directly only when you need `perf.data`, perf-native analysis, or hardware performance counters.
+For .NET 10 and later versions that meet the prerequisites, use `dotnet-trace collect-linux`. If `collect-linux` isn't available, use `perf` for kernel-level CPU sampling. Also use `perf` when you need `perf.data`, perf-native analysis, or hardware performance counters.
 
 #### Use `dotnet-trace collect-linux` (.NET 10+)
 
@@ -189,30 +190,13 @@ sudo dotnet-trace collect-linux
 
 Let it run for about 20-30 seconds, then press <kbd>Ctrl+C</kbd> or <kbd>Enter</kbd> to stop the collection. The result is a `.nettrace` file that includes both managed and native callstacks.
 
-Open the `.nettrace` with [`PerfView`](https://github.com/microsoft/perfview/blob/main/documentation/Downloading.md) and use the **CPU Stacks** view to identify the methods consuming the most CPU time.
+Open the `.nettrace` file with [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1). Use the **CPU Stacks** view to identify the methods that consume the most CPU time.
 
-PerfView and TraceEvent 3.2.1 or later can resolve .NET native and R2R symbols at analysis time. In PerfView, select unresolved module frames and choose **Lookup Symbols**. For other native libraries, configure a local symbol path. For more information, see [Get symbols for native runtime frames](dotnet-trace.md#get-symbols-for-native-runtime-frames).
-
-For a broader workflow that covers CPU, blocking, GC, exceptions, I/O, and startup, see [Investigate Linux performance with `dotnet-trace collect-linux`](dotnet-trace-collect-linux-performance.md).
-
-#### Use OneCollect `record-trace`
-
-OneCollect's [`record-trace`](https://github.com/microsoft/one-collect/tree/main/record-trace) tool provides lower-level control over event selection, process and CPU filtering, scripts, and output format. See the [OneCollect build instructions](https://github.com/microsoft/one-collect/blob/main/CONTRIBUTING.md#building-the-project) to obtain the tool.
-
-This CPU profiling workflow doesn't require .NET 10 or `user_events`. After making the executable available on `PATH`, exercise the high CPU endpoint again, and while it's running, capture a 30-second machine-wide CPU profile:
-
-```bash
-sudo record-trace \
-  --on-cpu \
-  --duration 30 \
-  --out highcpu.nettrace
-```
-
-This example uses the default NetTrace output so that you can open `highcpu.nettrace` in PerfView and inspect **CPU Stacks**. `record-trace` can also write PerfView XML with `--format perfview-xml`, display samples while recording with `--live`, and use Rhai scripts for more detailed event configuration.
+PerfView 3.2.1 or later can resolve .NET native and R2R symbols at analysis time. In PerfView, select unresolved module frames and choose **Lookup Symbols**. For other native libraries, configure a local symbol path. For more information, see [Get symbols for native runtime frames in PerfView](dotnet-trace.md#get-symbols-for-native-runtime-frames-in-perfview).
 
 #### Use `perf`
 
-Use `perf` directly when the investigation requires the Linux perf ecosystem, such as `perf.data`, `perf report`, `perf annotate`, established flame graph scripts, or hardware performance counters. The following steps demonstrate the standard `perf record` and `perf report` workflow. Exit the previous instance of the [sample debug target](/samples/dotnet/samples/diagnostic-scenarios).
+Use `perf` when `collect-linux` isn't available and you need kernel-level CPU sampling. Also use `perf` when the investigation requires the Linux perf ecosystem, such as `perf.data`, `perf report`, `perf annotate`, established flame graph scripts, or hardware performance counters. The following steps demonstrate the standard `perf record` and `perf report` workflow. Exit the previous instance of the [sample debug target](/samples/dotnet/samples/diagnostic-scenarios).
 
 Set the `DOTNET_PerfMapEnabled` environment variable to cause the .NET app to create a `map` file in the `/tmp` directory. This `map` file is used by `perf` to map CPU addresses to JIT-generated functions by name. For more information, see [Export perf maps and jit dumps](../runtime-config/debugging-profiling.md#export-perf-maps-and-jit-dumps).
 
@@ -262,9 +246,11 @@ Open the `nettrace` with [`PerfView`](https://github.com/microsoft/perfview/blob
 
 ---
 
-## Analyze high CPU data with Visual Studio
+## Analyze a standard trace with Visual Studio
 
-All \*.nettrace files can be analyzed in Visual Studio. To analyze a Linux \*.nettrace file in Visual Studio, transfer the \*.nettrace file, in addition to the other necessary documents, to a Windows machine, and then open the \*.nettrace file in Visual Studio. For more information, see [Analyze CPU Usage Data](/visualstudio/profiling/beginners-guide-to-performance-profiling?#step-2-analyze-cpu-usage-data).
+Visual Studio can analyze `.nettrace` files that `dotnet-trace collect` creates. To analyze one of these files, transfer the file and any required supporting files to a Windows machine, and then open the trace in Visual Studio. For more information, see [Analyze CPU usage data](/visualstudio/profiling/beginners-guide-to-performance-profiling?#step-2-analyze-cpu-usage-data).
+
+The `collect-linux` steps in this tutorial use PerfView 3.2.1 or later. This article documents PerfView support for the updated preview trace format and its analysis-time native and R2R symbol lookup.
 
 ## See also
 
