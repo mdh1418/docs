@@ -1,9 +1,10 @@
 ---
 title: Diagnose performance issues in .NET applications
 description: Choose diagnostic data and tools based on the symptoms of a .NET performance problem.
-ms.date: 09/08/2026
+ms.date: 09/11/2026
 ms.topic: conceptual
 #Customer intent: As a .NET developer, I want to choose the right diagnostic tools and data to find the cause of a performance problem.
+ai-usage: ai-assisted
 ---
 
 # Diagnose performance issues in .NET applications
@@ -72,10 +73,6 @@ Collecting more of the same data doesn't recover information that the artifact d
 | Native allocation ownership | Native memory profiler |
 | Cache misses, branch prediction, IPC, or memory bandwidth | Hardware performance counters and platform profiler |
 | Inlined methods or generated machine instructions | Source, disassembly, or a diagnostic build |
-
-## Practice the Linux workflows
-
-[Practice Linux performance investigations with `dotnet-trace collect-linux`](dotnet-trace-collect-linux-scenarios.md) provides runnable CPU, memory, GC, blocking, contention, I/O, exception, startup, process, mixed-cause, and healthy-control exercises. Use it after the symptom table points to a Linux performance trace and you want hands-on practice selecting the focused configuration and interpreting the evidence.
 
 ## See also
 

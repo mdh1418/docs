@@ -1,99 +1,115 @@
 ---
-title: Investigate Linux performance with dotnet-trace
-description: Use dotnet-trace collect-linux to investigate CPU, memory, blocking, I/O, exception, and startup performance issues.
-ms.date: 09/08/2026
-ms.topic: how-to
-#Customer intent: As a .NET developer on Linux, I want to collect and analyze the right trace data to find the cause of a performance problem.
+title: "Tutorial: Investigate Linux performance with dotnet-trace"
+description: Use dotnet-trace collect-linux to investigate managed, native, runtime, and machine-wide Linux performance.
+ms.date: 09/11/2026
+ms.topic: tutorial
+#Customer intent: As a .NET developer on Linux, I want to collect and analyze a trace that identifies the cause of a performance problem.
+ai-usage: ai-assisted
 ---
 
-# Investigate Linux performance with `dotnet-trace collect-linux`
+# Tutorial: Investigate Linux performance with `dotnet-trace collect-linux`
 
-`dotnet-trace collect-linux` records .NET runtime events together with Linux CPU samples, native call stacks, process activity, scheduling data, and kernel events. Use it when you need to correlate what a .NET application is doing with what is happening on the rest of the Linux machine.
+`dotnet-trace collect-linux` records .NET runtime events together with Linux CPU samples, native call stacks, process activity, scheduling data, and kernel events. Use it on .NET 10 and later versions when you need to correlate application activity with activity across the Linux machine.
 
-Start with [Diagnose performance issues in .NET applications](performance-diagnostics.md) to choose the primary workflow for the observed symptom. When that workflow calls for a Linux performance trace, this article explains how to select `collect-linux` data, move from a broad trace to a focused trace, and analyze the result. For complete command syntax and platform requirements, see the [`collect-linux` reference](dotnet-trace.md#dotnet-trace-collect-linux).
+This tutorial starts with a short machine-wide CPU trace and then adds focused data for a specific question. Five examples show the observations that support a conclusion about managed CPU, native CPU, external CPU competition, allocation and garbage collection (GC), or ThreadPool starvation.
 
-For hands-on practice choosing among the configurations in this article, use the runnable [Linux performance investigation scenarios](dotnet-trace-collect-linux-scenarios.md).
+If `collect-linux` isn't available, use Linux `perf` for kernel-level CPU sampling. Also use `perf` when you need `perf.data`, perf-native analysis, or hardware performance counters. For a `perf` walkthrough, see [Debug high CPU usage](debug-highcpu.md#use-perf).
 
-## Start with a short machine-wide trace
+For complete command syntax and platform requirements, see the [`collect-linux` reference](dotnet-trace.md#dotnet-trace-collect-linux).
 
-When the cause is unknown, begin with a short, machine-wide trace that intentionally combines only the `dotnet-common` and `cpu-sampling` profiles. `dotnet-common` provides lightweight .NET runtime context, while `cpu-sampling` provides Linux CPU samples and native call stacks. Together they can show whether CPU is consumed by the application, the runtime, native or kernel code, or another process without enabling every high-volume event source.
+## Prerequisites
 
-Machine-wide collection also preserves evidence that a process-only trace can miss:
+The tutorial requires:
 
-- CPU consumed by competing processes.
-- Short-lived child processes.
-- Work performed before the target process can be attached.
-- Application, runtime, native-library, and kernel CPU in the same time range.
+- Linux that meets the [`collect-linux` prerequisites](dotnet-trace.md#prerequisites).
+- The [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0).
+- The latest [`dotnet-trace`](dotnet-trace.md) global tool.
+- [PerfView 3.2.1 or later](https://github.com/microsoft/perfview/releases/tag/v3.2.1) on Windows for the analysis steps.
+- The [performance scenarios sample](/samples/dotnet/samples/dotnet-trace-collect-linux-performance-scenarios/).
 
-The initial trace omits `thread-time` deliberately. Scheduler and context-switch events can make a machine-wide trace much larger. Add `thread-time` when blocking is already the symptom, or as a focused follow-up when the target is slow while using little CPU.
+The `collect-linux` verb uses an updated preview `.nettrace` format. This tutorial uses PerfView because version 3.2.1 and later supports the format and can resolve .NET native and ReadyToRun (R2R) symbols at analysis time. Other analysis tools might not yet support the updated format.
+
+## Prepare the sample
+
+From the sample directory, build the application and list its scenarios:
 
 ```dotnetcli
-sudo dotnet-trace collect-linux --profile dotnet-common,cpu-sampling
+dotnet build -c Release
+dotnet run -c Release --no-build -- --list
 ```
 
-Start collection shortly before reproducing the problem, capture a representative 10-30 second interval, and stop collection after the symptom occurs. Keeping the first trace short bounds collection overhead and trace size while retaining enough context to choose the next investigation step. Press <kbd>Enter</kbd> or <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop interactively, or add a duration such as `--duration 00:00:00:30`. The profile in the preceding command is the default configuration, shown explicitly.
+Use one terminal to run a workload and another terminal to collect the trace. Each workload prints its process ID, symptom, and duration.
 
-Resolve native and ReadyToRun frames as described in [Get symbols for native runtime frames](dotnet-trace.md#get-symbols-for-native-runtime-frames).
+## Collect a short machine-wide trace
 
-Open the trace in a current version of PerfView and filter the result to the relevant process and time range.
+Start with the default `dotnet-common,cpu-sampling` profiles when you don't yet know which code consumes CPU. The profiles combine lightweight .NET runtime context with Linux CPU samples and native call stacks.
 
-Use the first trace to choose a direction, and then collect only the detailed events required to answer the next question. High event rates increase trace size and collection overhead, so use a focused configuration from the start for long-running collection.
+In the workload terminal, run the managed CPU scenario:
 
-## Understand the available data
+```dotnetcli
+dotnet run -c Release --no-build -- cpu-hotspot 45
+```
 
-### CPU samples show what was running
+Shortly after the workload starts, collect a 30-second trace:
 
-CPU sampling periodically records the stack running on each CPU. Use CPU samples to determine:
+```dotnetcli
+sudo dotnet-trace collect-linux \
+  --profile dotnet-common,cpu-sampling \
+  --duration 00:00:00:30 \
+  --output cpu-hotspot.nettrace
+```
 
-- Which process consumed CPU.
-- Which application method or native function used CPU.
-- Whether work moved into the runtime, a native library, or the kernel.
-- Whether another process competed with the target for CPU.
+Machine-wide collection preserves evidence that a process-only trace can miss:
 
-CPU samples don't explain time spent sleeping or waiting because a thread that isn't running can't be sampled.
+- CPU that competing processes consume.
+- Short-lived child processes.
+- Work that occurs before a collector can attach to a process.
+- Application, runtime, native-library, and kernel CPU in the same interval.
 
-### Thread-time data shows why threads weren't running
+Keep the initial trace short. Scheduler events and detailed runtime events can increase trace size and collection overhead. Add them only when the first trace or the symptom identifies a specific question.
 
-Thread-time data records scheduling and context-switch activity. It distinguishes among:
+Transfer the `.nettrace` file to the Windows machine that has PerfView. `collect-linux` captures native and R2R frames. To resolve those frames during analysis, follow [Get symbols for native runtime frames in PerfView](dotnet-trace.md#get-symbols-for-native-runtime-frames-in-perfview).
 
-| Thread state | Interpretation |
-| --- | --- |
-| Running and accumulating CPU time | The thread is executing; use CPU stacks to find the expensive path. |
-| Waiting in a lock, task, timer, sleep, or I/O call | The thread can't run until the operation completes. |
-| Ready to run but receiving little CPU | Other runnable work is competing for CPU. |
-| ThreadPool worker waiting synchronously | The worker can't process queued work and might contribute to starvation. |
+## Example: Find a managed CPU hotspot
 
-PerfView can label time spent not executing as *blocked time* or *off-CPU time*. This time is summed across threads and can exceed the wall-clock duration of the trace.
+Open `cpu-hotspot.nettrace` in PerfView:
 
-### .NET runtime events describe runtime activity
+1. Open **CPU Stacks**.
+1. Select the interval when the workload ran.
+1. Filter to the sample process.
+1. Find the application method with the greatest exclusive cost.
+1. Follow the inclusive callers back to the application entry point.
 
-Runtime events provide details that CPU samples alone don't contain:
+**Observation:** `CpuScenarios.Fibonacci` owns nearly all samples for the sample process. Its callers remain in the application stack.
 
-| Runtime data | Questions it can answer |
-| --- | --- |
-| GC and allocation | Which types allocate? Where are they allocated? Why and how often does GC run? How long are pauses? |
-| Exceptions | Which exceptions are thrown, even when caught? Which path repeatedly throws them? |
-| Contention | Which lock acquisition path waits, and for how long? |
-| Threading | Is the ThreadPool adding workers? Are workers blocked? |
-| JIT and loader | Which methods are compiled and which assemblies load during startup? |
+**Conclusion:** The process is compute-bound in `Fibonacci`. The trace identifies both the expensive method and the application path that invokes it.
 
-The `dotnet-common` profile provides useful summary events. Detailed allocation, contention, exception, and JIT analysis usually requires a focused follow-up trace.
+High exclusive cost identifies where the CPU sampled execution. Inclusive cost shows the callers that led to that work. Start with exclusive cost, and then follow inclusive callers to find the application code that can change.
 
-### Linux events connect operations to callers
+## Choose focused trace data
 
-Linux perf events can record syscalls, process lifecycle, scheduling, and other kernel activity. Event call stacks connect an operation such as `read`, `write`, `fsync`, or `execve` to the managed or native caller that initiated it.
+Select data based on the next question:
 
-## Choose a focused follow-up trace
+| Question | Data to collect | What the data shows |
+| --- | --- | --- |
+| What code was executing? | CPU samples | The managed, native, or kernel stack running on each CPU. |
+| Why wasn't a thread executing? | Thread-time data | Whether the thread was blocked, ready to run, or running. |
+| What runtime work occurred? | .NET runtime events | Allocation, GC, contention, ThreadPool, exception, JIT, and loader activity. |
 
-The examples show only the event configuration. Add `--duration` or `--output` when appropriate. Use `--name` or `--process-id` only when the target process is already running. To trace startup, collect machine-wide and filter to the process during analysis.
+Use these focused configurations for the remaining examples.
 
-### General starting point
-
-This is the default configuration, written explicitly:
+### General CPU and native analysis
 
 ```dotnetcli
 sudo dotnet-trace collect-linux \
   --profile dotnet-common,cpu-sampling
+```
+
+### CPU competition and scheduling
+
+```dotnetcli
+sudo dotnet-trace collect-linux \
+  --profile thread-time,cpu-sampling
 ```
 
 ### Allocation and GC
@@ -112,129 +128,104 @@ sudo dotnet-trace collect-linux \
   --clreventlevel Verbose
 ```
 
-### First-chance exceptions
+Profiles are presets for different data sources. `cpu-sampling` and `thread-time` configure Linux collection. `gc-verbose` configures the .NET runtime provider.
 
-This configuration includes exceptions that application code catches:
+When you use `--clrevents`, select only kernel profiles such as `cpu-sampling` or `thread-time`. If a selected profile already configures `Microsoft-Windows-DotNETRuntime`, the tool uses the profile configuration and ignores `--clrevents`.
 
-```dotnetcli
-sudo dotnet-trace collect-linux \
-  --profile cpu-sampling \
-  --clrevents exception \
-  --clreventlevel Verbose
-```
+## Example: Follow managed code into native code
 
-### Reads, writes, and durable flushes
+Run the native CPU scenario:
 
 ```dotnetcli
-sudo dotnet-trace collect-linux \
-  --profile thread-time,cpu-sampling \
-  --perf-events "syscalls:sys_enter_read,syscalls:sys_exit_read,syscalls:sys_enter_write,syscalls:sys_exit_write,syscalls:sys_enter_fsync,syscalls:sys_exit_fsync"
+dotnet run -c Release --no-build -- native-cpu 45
 ```
 
-### Startup and JIT
+Collect the general CPU trace for 30 seconds and open **CPU Stacks** in PerfView. Filter to the sample process, and then follow the stack from the managed P/Invoke method into the C runtime.
 
-Begin collection before launching the application:
+If the native frame is unresolved, select the module frames and choose **Lookup Symbols**. .NET native and R2R runtime symbols are available from the Microsoft Symbol Server. For native libraries from other Linux distributions, configure PerfView with a local symbol path that contains the matching distribution symbol files.
+
+**Observation:** Samples cross `CpuScenarios.Memcpy` and accumulate in the native `memcpy` function.
+
+**Conclusion:** The application initiates the work, but the CPU cost occurs in a native memory copy. Optimize the copy frequency or size rather than the managed P/Invoke stub.
+
+## Example: Identify external CPU competition
+
+Run the CPU competition scenario:
 
 ```dotnetcli
-sudo dotnet-trace collect-linux \
-  --profile cpu-sampling \
-  --clrevents assemblyloader+loader+jit+threading \
-  --clreventlevel Verbose
+dotnet run -c Release --no-build -- cpu-competition 45
 ```
 
-Profiles are presets, and presets for different data sources can be combined. For example, `cpu-sampling` and `thread-time` configure Linux collection while `--clrevents` configures the .NET runtime provider.
+Collect the general machine-wide CPU trace. In PerfView, open **CPU Stacks** and compare all processes before you filter to the target.
 
-Configurations don't merge when `--providers`, `--profile`, and `--clrevents` configure the same .NET provider. The precedence is:
+**Observation:** Several sample worker processes run `SystemScenarios.CpuWorkerAsync` during the same interval. Together, the workers consume the available CPUs, while the target process receives less CPU than its runnable work requests.
 
-1. An explicit `--providers` entry.
-1. The first selected profile that configures the provider.
-1. `--clrevents`, only when nothing earlier configured `Microsoft-Windows-DotNETRuntime`.
+The CPU trace shows overlapping competition. To confirm that the target was ready to run but didn't receive CPU, repeat the workload with the CPU competition and scheduling configuration. Compare the target's running time with its ready-to-run time in the thread-time stacks.
 
-For example, if `dotnet-common` or `gc-verbose` configures the runtime provider, the tool prints a warning and ignores a supplied `--clrevents` list. Use kernel-only profiles such as `cpu-sampling` or `thread-time` with a focused `--clrevents`/`--clreventlevel` configuration.
+**Conclusion:** Other processes saturate the machine. The target isn't blocked inside the application. A process-only trace would hide the competing workers and could lead to an incorrect application-code diagnosis.
 
-## Analyze the trace
+Another process with many samples doesn't prove interference by itself. The explanation requires overlapping CPU use, machine saturation, and target threads that are ready but receive less CPU than expected.
 
-### 1. Select the symptom interval
+## Example: Correlate allocation, GC, and CPU
 
-Open the trace in [PerfView](https://github.com/microsoft/perfview) and select the time interval in which the slowdown, memory growth, pause, or startup delay occurred. Analysis outside that interval can hide a short problem beneath otherwise normal behavior.
+Run the allocation and GC scenario:
 
-### 2. Examine the whole machine
+```dotnetcli
+dotnet run -c Release --no-build -- allocation-gc 45
+```
 
-Open **CPU Stacks** and compare processes:
+Collect the allocation and GC configuration for 30 seconds. In PerfView:
 
-- Does the target own most CPU samples?
-- Are other processes using the CPUs at the same time?
-- Did many child processes appear?
-- Is CPU spread across many threads or concentrated in one?
+1. Open **GCStats** to review collection frequency, pause time, and heap size.
+1. Open **GC Heap Alloc Ignore Free (Coarse Sampling)** to find the dominant allocation types and their callers.
+1. Open **CPU Stacks** to determine where the process spends CPU.
+1. Select the same workload interval in each view.
 
-Another process having many samples doesn't by itself prove that it slowed the target. External CPU competition becomes a supported explanation when its CPU use overlaps the slowdown, the machine is close to saturation, and runnable target threads receive less CPU than expected. A thread-time trace can confirm the last condition.
+**Observation:** `System.String` dominates sampled allocations, collections occur repeatedly during the workload, and CPU stacks lead to the sample's string-building path.
 
-### 3. Follow the target's CPU stacks
+**Conclusion:** Repeated string construction creates allocation churn that drives both application CPU and GC work. The trace identifies where objects are created; it doesn't show that the objects remain reachable as a memory leak.
 
-Filter to the target process. Begin with methods that have high *exclusive* cost, where samples occurred directly in the method. Then inspect their *inclusive* callers until the stack reaches application code.
+Correlate the allocation, collection, and CPU intervals. GC activity alone doesn't prove that GC is the original cause because application allocation can drive both the collections and the CPU cost.
 
-If native frames remain unresolved, configure the [matching native symbols](dotnet-trace.md#get-symbols-for-native-runtime-frames) before relying on method names in those frames.
+## Example: Diagnose sync-over-async ThreadPool starvation
 
-Common directions include:
+Run the sync-over-async scenario:
 
-- One application method dominates: investigate that algorithm or call site.
-- GC methods dominate: inspect GC and allocation data.
-- Exception helpers dominate: inspect exception events.
-- Lock slow paths appear: inspect contention and thread-time data.
-- Filesystem, socket, or syscall frames appear: inspect Linux events.
-- `libclrjit` dominates early in the trace: inspect JIT and loader events.
+```dotnetcli
+dotnet run -c Release --no-build -- sync-over-async 45
+```
 
-Inlining can remove small logical methods from physical stacks. Use source, disassembly, or a diagnostic no-inline build when samples reach only a broad surviving caller.
+Collect the blocking, contention, and ThreadPool configuration for 30 seconds. In PerfView:
 
-### 4. Investigate memory and GC
+1. Open the thread-time stacks for the sample process.
+1. Find ThreadPool worker stacks with high blocked time.
+1. Inspect `WaitHandleWait` and ThreadPool events in the **Events** view.
+1. Follow the blocked stack to the application method that initiated the wait.
 
-Use these PerfView views:
+**Observation:** Worker stacks block in `Task` wait methods below `BlockingScenarios.SyncOverAsyncAsync`. ThreadPool events show worker growth while the process uses little CPU.
 
-1. **GCStats** to review collection generation, reason, frequency, pause time, promoted data, and heap size.
-1. **GC Heap Alloc Ignore Free (Coarse Sampling)** to find dominant allocation types and their application callers.
-1. **Events** filtered to `GC/AllocationTick`, `GC/Start`, and `GC/Stop` for exact timing and payload fields.
+**Conclusion:** Synchronous waits on asynchronous operations make workers unavailable and cause ThreadPool starvation. Replace the blocking `.Result` call with `await` so the worker can process other work during the delay.
 
-Allocation traces show where objects are created, not why they remain alive. Use [`dotnet-gcdump`](dotnet-gcdump.md) or a [process dump](dotnet-dump.md) for retention roots. If process RSS grows while the managed heap remains flat, inspect native allocations and operating-system memory mappings.
+Thread-time values are summed across threads, so total blocked time can exceed the trace's wall-clock duration. Focus on the application stacks that account for the blocked workers.
 
-### 5. Investigate low-CPU latency
+## Use another artifact when the trace can't answer the question
 
-Open thread-time stacks for the target and compare CPU time with blocked time. Look for:
+Choose a different artifact when the remaining question isn't represented in the trace:
 
-- Monitor, reader/writer lock, task wait, sleep, futex, timer, and I/O frames.
-- ThreadPool worker starts, adjustments, and cooperative-blocking events.
-- The application callback immediately above a wait.
-- Runnable target threads receiving little CPU while other processes execute.
+| Information you need | Use |
+| --- | --- |
+| Current deadlock owners and the complete wait cycle | A process dump and [Debug a deadlock](debug-deadlock.md). |
+| Reference paths that keep managed objects alive | A process dump and [Debug a memory leak](debug-memory-leak.md). |
+| Native allocation ownership | A native memory profiler. |
+| Logical async, request, or distributed causality | Activities, distributed tracing, or application instrumentation. |
+| Hardware counters or `perf.data` | Linux `perf`. |
+| Methods removed from physical stacks by optimization | Source, disassembly, or a diagnostic build. |
 
-Contention events can identify a waiting lock path and duration without showing what the owner was doing. Use a process dump to prove an existing deadlock and its lock-ownership cycle.
-
-Async work can resume on another thread, so a physical wait stack doesn't always preserve the logical initiating caller. Use activities, distributed tracing, or application instrumentation when that relationship is required.
-
-### 6. Investigate I/O
-
-Filter events to the relevant syscall and open its stacks. Follow `read`, `write`, `fsync`, or a socket operation back to application code. Thread-time data shows whether the operation blocked threads or occupied ThreadPool workers.
-
-Add block-device events only when the remaining question is storage-device latency. They are machine-wide and can be noisy. They aren't required when syscall stacks already identify an application issuing excessive small operations or forced flushes.
-
-### 7. Investigate exceptions and startup
-
-For exceptions, count first-chance events and inspect their stacks. A repeated throw site can reduce throughput even when every exception is caught and no error is logged.
-
-For startup, begin collection before launching the application. Correlate early CPU activity with:
-
-- JIT method events and `libclrjit` stacks.
-- Assembly and module loading.
-- Static initialization.
-- File operations and process launches.
-
-Short-lived child processes can appear in process lifecycle events even when they don't run long enough to receive a CPU sample.
-
-## Know when to use another artifact
-
-See [Choose a different artifact when a performance trace can't answer the question](performance-diagnostics.md#choose-a-different-artifact-when-a-performance-trace-cant-answer-the-question) for artifact-selection guidance. In particular, use a native memory profiler for native allocation ownership, Linux `perf` for hardware performance counters, and source or disassembly when optimization removed a logical method from the physical call stack.
+Collecting more events of the same type can't recover a relationship that the trace doesn't contain.
 
 ## Manage collection overhead
 
-Trace overhead depends on event rate, enabled providers, stack capture, CPU count, and workload behavior. High-volume traces can lose events or perturb the application being measured.
+Trace overhead depends on event rate, enabled providers, stack capture, CPU count, and workload behavior. High-volume traces can lose events or affect the application.
 
 - Keep the initial trace short.
 - Enable only the detailed events needed for the current question.
@@ -244,8 +235,7 @@ Trace overhead depends on event rate, enabled providers, stack capture, CPU coun
 
 ## See also
 
-- [Diagnose performance issues in .NET applications](performance-diagnostics.md)
-- [Practice Linux performance investigations](dotnet-trace-collect-linux-scenarios.md)
 - [`dotnet-trace` reference](dotnet-trace.md)
 - [Debug high CPU usage](debug-highcpu.md)
+- [Debug ThreadPool starvation](debug-threadpool-starvation.md)
 - [Collect diagnostics in Linux containers](diagnostics-in-containers.md)
